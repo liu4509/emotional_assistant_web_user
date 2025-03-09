@@ -54,6 +54,23 @@
                 </a-form-item>
 
                 <a-form-item
+                  label="邮箱"
+                  name="email"
+                  :rules="[
+                    {
+                      required: true,
+                      message: '请输入邮箱!',
+                    },
+                    {
+                      pattern: /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/,
+                      message: '邮箱格式不正确',
+                    },
+                  ]"
+                >
+                  <a-input v-model:value="registerFormState.email" />
+                </a-form-item>
+
+                <a-form-item
                   label="密码"
                   name="password"
                   :rules="[{ required: true, message: '请输入密码!' }]"
@@ -67,6 +84,23 @@
                   :rules="[{ required: true, message: '请再次输入密码!' }]"
                 >
                   <a-input-password v-model:value="registerFormState.confirmPassword" />
+                </a-form-item>
+
+                <a-form-item
+                  label="验证码"
+                  name="captcha"
+                  :rules="[{ required: true, message: '请输入验证码!' }]"
+                >
+                  <div class="captcha-container">
+                    <a-input
+                      v-model:value="registerFormState.captcha"
+                      style="width: 150px; margin-right: 10px"
+                      placeholder="请输入验证码"
+                    />
+                    <a-button type="primary" :disabled="countdown > 0" @click="handleSendCaptcha">
+                      {{ countdown > 0 ? `${countdown}秒后重发` : '获取验证码' }}
+                    </a-button>
+                  </div>
                 </a-form-item>
 
                 <a-form-item :wrapper-col="{ offset: 8, span: 16 }">
@@ -93,8 +127,10 @@ const formState = reactive({
 
 const registerFormState = reactive({
   username: '',
+  email: '',
   password: '',
   confirmPassword: '',
+  captcha: '',
 })
 
 const onFinish = (values) => {
@@ -111,6 +147,30 @@ const onRegisterFinish = (values) => {
 
 const onRegisterFinishFailed = (errorInfo) => {
   console.log('Register Failed:', errorInfo)
+}
+
+const countdown = ref(0)
+let timer = null
+
+const handleSendCaptcha = () => {
+  if (!registerFormState.username) {
+    // message.error('请输入用户名')
+    return
+  }
+
+  if (!registerFormState.email) {
+    // message.error('请输入邮箱')
+    return
+  }
+
+  // 这里应该调用发送验证码的API
+  countdown.value = 60
+  timer = setInterval(() => {
+    countdown.value -= 1
+    if (countdown.value <= 0) {
+      clearInterval(timer)
+    }
+  }, 1000)
 }
 </script>
 
@@ -133,5 +193,10 @@ const onRegisterFinishFailed = (errorInfo) => {
   padding: 24px;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.captcha-container {
+  display: flex;
+  align-items: center;
 }
 </style>

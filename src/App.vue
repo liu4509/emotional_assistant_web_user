@@ -10,31 +10,19 @@ const handleMenuSelect = ({ key }) => {
 </script>
 
 <template>
-  <a-layout>
+  <a-layout class="content">
     <a-layout-header class="header">
-      <a-menu
-        mode="horizontal"
-        theme="dark"
-        :selected-keys="[$route.path]"
-        @select="handleMenuSelect"
-      >
+      <a-menu mode="horizontal" theme="dark" :selected-keys="[$route.path]" @select="handleMenuSelect">
         <div style="display: flex">
-          <a-menu-item key="/diary">
-            <template #icon><book-outlined /></template>
-            情绪日记
-          </a-menu-item>
-          <a-menu-item key="/media">
-            <template #icon><book-outlined /></template>
-            音乐视频
-          </a-menu-item>
+          <a-menu-item key="/diary"> 情绪日记 </a-menu-item>
+          <a-menu-item key="/media"> 音乐视频 </a-menu-item>
+          <a-menu-item key="/chat"> AI 助手 </a-menu-item>
         </div>
         <a-sub-menu key="1" title="旅游">
-          <template #icon><global-outlined /></template>
           <a-menu-item key="/travel">旅游推荐</a-menu-item>
           <a-menu-item key="/upload">打卡照片</a-menu-item>
         </a-sub-menu>
         <a-sub-menu key="2" title="心理">
-          <template #icon><global-outlined /></template>
           <!-- <a-menu-item key="/trend">情绪趋势</a-menu-item> -->
           <a-menu-item key="/articles">心理知识文章</a-menu-item>
           <a-menu-item key="/videos">心理知识视频</a-menu-item>
@@ -43,14 +31,8 @@ const handleMenuSelect = ({ key }) => {
           <a-menu-item key="/training">情绪调节训练场景</a-menu-item>
           <!-- <a-menu-item key="/qa">训练问题</a-menu-item> -->
         </a-sub-menu>
-        <a-menu-item key="/profile" style="margin-left: auto">
-          <template #icon><profile-outlined /></template>
-          个人中心
-        </a-menu-item>
-        <a-menu-item key="/login">
-          <template #icon><user-outlined /></template>
-          登录注册
-        </a-menu-item>
+        <a-menu-item key="/profile" style="margin-left: auto"> 个人中心 </a-menu-item>
+        <a-menu-item key="/login"> 登录注册 </a-menu-item>
       </a-menu>
     </a-layout-header>
     <a-layout-content class="content-container">
@@ -75,18 +57,10 @@ const handleMenuSelect = ({ key }) => {
 .content-container {
   margin-top: 50px;
   min-height: 100vh;
-  /* display: flex; */
-  /* flex-direction: column; */
-  /* align-items: center; */
-  /* overflow: auto; */
 }
 
 .ant-layout-content {
   width: 100%;
-  /* max-width: 1200px; */
   padding: 20px;
-  /* flex: 1; */
-  /* position: relative; */
-  /* z-index: 1; */
 }
 </style>

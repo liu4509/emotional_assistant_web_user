@@ -6,7 +6,6 @@ const router = createRouter({
     { path: '/login', component: () => import('../views/LoginView.vue') },
     { path: '/profile', component: () => import('../views/ProfileView.vue') },
     { path: '/diary', component: () => import('../views/DiaryView.vue') },
-    // { path: '/trend', component: () => import('../views/TrendView.vue') },
     { path: '/travel', component: () => import('../views/TravelView.vue') },
     { path: '/upload', component: () => import('../views/UploadView.vue') },
     { path: '/media', component: () => import('../views/MediaView.vue') },
@@ -15,7 +14,18 @@ const router = createRouter({
     { path: '/games', component: () => import('../views/GameView.vue') },
     { path: '/survey', component: () => import('../views/SurveyView.vue') },
     { path: '/training', component: () => import('../views/TrainingView.vue') },
-    // { path: '/qa', component: () => import('../views/QaView.vue') },
+    // {
+    //   path: '/aiassistant',
+    //   component: () => import('../components/ai.vue'),
+    // },
+    {
+      path: '/chat',
+      component: () => import('../views/DeepseekChat.vue'),
+    },
+    {
+      path: '/',
+      redirect: '/diary'
+    }
   ],
 })
 
