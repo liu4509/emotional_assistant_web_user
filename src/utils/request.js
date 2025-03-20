@@ -4,10 +4,10 @@ import { message } from 'ant-design-vue'
 // 创建 axios 实例
 const service = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api', // 从环境变量获取API基础URL，默认为'/api'
-  timeout: 15000, // 请求超时时间
-  headers: {
-    'Content-Type': 'application/json'
-  }
+  timeout: 150000, // 请求超时时间
+  // headers: {
+  //   'Content-Type': 'application/json'
+  // }
 })
 
 // 请求拦截器

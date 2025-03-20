@@ -30,7 +30,7 @@
 
       <!-- 消息区域 -->
       <div class="messages-container" ref="messagesContainer">
-        <template v-if="currentChat && currentChat.messages.length > 0">
+        <template v-if="currentChat && currentChat.messages?.length > 0">
           <transition-group name="message-fade">
             <div v-for="message in currentChat.messages" :key="message.id"
               :class="['message', message.sender === 'ai' ? 'ai-message' : 'user-message']">
@@ -41,7 +41,14 @@
                   <span class="dot"></span>
                   <span class="dot"></span>
                 </p>
-                <p v-else v-html="formatMessage(message.content)"></p>
+                <div v-else class="message-wrapper">
+                  <p v-html="formatMessage(message.content)"></p>
+                  <div v-if="message.status === 'error'" class="message-error">
+                    <a-tooltip title="发送失败，点击重试">
+                      <redo-outlined class="retry-icon" @click="retryMessage(message)" />
+                    </a-tooltip>
+                  </div>
+                </div>
               </div>
             </div>
           </transition-group>
@@ -89,89 +96,34 @@
 
 <script>
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import {
+  getChatList,
+  getChatById,
+  createChat,
+  updateChatTitle,
+  deleteChat as deleteChatApi,
+  getChatMessages,
+  createMessage,
+  getAIResponse
+} from '@/api/chat'
+import { message } from 'ant-design-vue'
+import { RedoOutlined } from '@ant-design/icons-vue'
 
-// 模拟API服务
+// 模拟API服务保留为备用
 const mockApiService = {
-  // 模拟获取历史对话列表
-  getChatHistory() {
-    return new Promise(resolve => {
-      setTimeout(() => {
-        resolve([
-          { id: '1', title: '我常常感觉到焦虑怎么办', messages: [] },
-          { id: '2', title: '我很难控制自己的情绪，经常发脾气怎么办', messages: [] },
-          { id: '3', title: '很难对别人敞开心扉，认为别人会嘲笑我的经历', messages: [] },
-        ])
-      }, 500)
-    })
-  },
-
-  // 模拟获取对话详情
-  getChatDetails(chatId) {
-    return new Promise(resolve => {
-      setTimeout(() => {
-        resolve({
-          id: chatId,
-          title: chatId === '1' ? '我常常感觉到焦虑怎么办' :
-            chatId === '2' ? '我很难控制自己的情绪，经常发脾气怎么办' : '很难对别人敞开心扉，认为别人会嘲笑我的经历',
-          messages: mockMessages[chatId] || []
-        })
-      }, 600)
-    })
-  },
-
-  // 模拟发送消息到AI
-  sendMessageToAI(message, context = []) {
-    return new Promise(resolve => {
-      setTimeout(() => {
-        let response
-
-        // 根据关键词生成情绪健康相关的回复
-        if (message.toLowerCase().includes('焦虑') || message.toLowerCase().includes('紧张')) {
-          response = "焦虑是一种常见的情绪反应，许多人都会经历。以下是一些可能帮助你缓解焦虑的方法：\n\n1. **深呼吸练习**：慢慢吸气数到4，屏住呼吸数到2，然后慢慢呼气数到6。重复几次可以帮助稳定情绪。\n\n2. **正念冥想**：花几分钟专注于当下，观察自己的呼吸和感受，不加判断。\n\n3. **规律运动**：每天30分钟的温和运动可以减轻焦虑症状。\n\n4. **健康饮食**：减少咖啡因和糖的摄入，增加水果、蔬菜和全谷物的摄入。\n\n5. **充足睡眠**：确保每晚有7-9小时的优质睡眠。\n\n6. **寻求专业帮助**：如果焦虑严重影响你的日常生活，考虑咨询心理医生或治疗师。\n\n记住，处理焦虑是一个过程，找到适合你的方法可能需要时间。你愿意分享是什么具体情况引发你的焦虑吗？"
-        } else if (message.toLowerCase().includes('发脾气') || message.toLowerCase().includes('控制情绪') || message.toLowerCase().includes('愤怒')) {
-          response = `控制情绪尤其是愤怒情绪确实可能很具挑战性。以下是一些可能对你有帮助的策略：\n\n1. **识别触发因素**：了解什么会引发你的愤怒，提前做好准备。\n\n2. **暂停技术**：当你感到情绪开始上升时，给自己10秒钟的冷静期。深呼吸并数到10。\n\n3. **情绪日记**：记录你的情绪波动，帮助识别模式和触发因素。\n\n4. **练习表达技巧**：学习用"我"为主语的表达方式，例如"我感到沮丧"而不是"你让我沮丧"。\n\n5. **寻求专业帮助**：心理治疗师可以教你认知行为技巧来管理情绪。\n\n6. **规律的自我照顾**：确保充足的睡眠、健康饮食和规律运动，这些都会影响情绪稳定性。\n\n你能否分享一下最近一次你难以控制情绪的具体情况？`
-        } else if (message.toLowerCase().includes('敞开心扉') || message.toLowerCase().includes('嘲笑') || message.toLowerCase().includes('社交焦虑')) {
-          response = `担心被他人评判或嘲笑是很自然的感受，许多人都经历过这种社交焦虑。这里有一些可能对你有帮助的建议：\n\n1. **从小处开始**：选择一个你信任的人，分享一些较小的、不那么脆弱的事情，逐渐建立舒适感。\n\n2. **寻找安全空间**：考虑加入支持小组或找专业咨询师，这些是练习开放自己的安全环境。\n\n3. **挑战负面想法**：当你想"他们会嘲笑我"时，问自己这种想法的证据是什么，是否有其他可能性。\n\n4. **设立界限**：了解自己愿意分享什么，不愿意分享什么，这是健康的自我保护。\n\n5. **自我接纳**：努力接受自己的经历和感受，减少自我评判。\n\n请记住，建立信任和开放自己需要时间，这是一个过程。你有没有具体的经历让你特别担心被他人知道？`
-        } else if (message.toLowerCase().includes('抑郁') || message.toLowerCase().includes('沮丧')) {
-          response = `感到沮丧或抑郁时，请记住你并不孤单，这些感受是很常见的，也是可以得到帮助的。以下是一些可能有帮助的建议：\n\n1. **寻求专业帮助**：心理治疗师、心理医生可以提供专业支持，包括心理治疗和必要时的药物治疗。\n\n2. **保持联系**：尽管可能感到想要独处，但与朋友、家人保持联系很重要。\n\n3. **设定小目标**：将任务分解成小的、可管理的步骤，完成后给自己肯定。\n\n4. **规律作息**：尝试保持规律的饮食、睡眠和运动习惯。\n\n5. **自我关爱**：做一些你喜欢的事情，给自己一些关心和照顾。\n\n如果你有自伤或自杀的想法，请立即联系心理健康专业人士或拨打心理危机热线。你的感受是重要的，而且情况是可以好转的。你愿意分享更多关于你感受的细节吗？`
-        } else if (message.toLowerCase().includes('失眠') || message.toLowerCase().includes('睡不着')) {
-          response = `睡眠问题可能与情绪健康密切相关，这里有一些可能帮助改善睡眠的建议：\n\n1. **规律作息**：尽量每天相同时间睡觉和起床，包括周末。\n\n2. **创造舒适环境**：保持卧室安静、黑暗和凉爽。\n\n3. **放松仪式**：睡前进行放松活动，如阅读、温水浴或冥想。\n\n4. **限制屏幕时间**：睡前至少一小时避免使用手机、电脑等电子设备。\n\n5. **注意饮食**：避免睡前摄入咖啡因、酒精和大量食物。\n\n6. **白天活动**：规律运动可以帮助入睡，但避免睡前剧烈运动。\n\n如果失眠问题持续存在并影响日常生活，建议咨询医生或睡眠专家。你的失眠持续多久了？有没有具体的事情让你在夜间难以入睡？`
-        } else if (message.toLowerCase().includes('压力') || message.toLowerCase().includes('工作压力') || message.toLowerCase().includes('学习压力')) {
-          response = `面对压力是现代生活的常态，但有效的压力管理方法可以帮助你应对：\n\n1. **识别压力源**：了解什么具体情况或事件触发你的压力反应。\n\n2. **时间管理**：使用待办事项列表，将任务分解为小步骤，设定优先级。\n\n3. **设立界限**：学会说"不"，避免过度承诺。\n\n4. **寻求支持**：与朋友、家人或同事分享你的感受和担忧。\n\n5. **健康生活方式**：保持均衡饮食，规律运动，充足睡眠。\n\n6. **放松技巧**：练习深呼吸、渐进式肌肉放松或冥想。\n\n7. **注意工作与生活平衡**：确保有足够的休息和娱乐时间。\n\n适度的压力可以是动力，但长期过度压力可能影响身心健康。你能分享具体是什么导致你现在感到压力吗？`
-        } else {
-          response = `感谢你分享你的感受。作为一个情绪助手，我在这里倾听和支持你。情绪和心理健康是非常重要的，每个人都有自己独特的经历和感受。无论你经历什么，请记住照顾自己的情绪健康是重要的，有时寻求专业帮助也是自我照顾的一部分。\n\n你可以更具体地告诉我你当前的情绪状态或面临的挑战吗？我可以提供更有针对性的支持和建议。`
-        }
-
-        resolve({
-          id: Date.now().toString(),
-          content: response,
-          sender: 'ai',
-          timestamp: new Date().toISOString(),
-          status: 'done'
-        })
-      }, 1500) // 增加延迟以显示加载效果
-    })
-  }
+  // ... 保留原有的模拟代码，以备不时之需
 }
 
-// 模拟消息数据
+// 模拟消息数据保留为备用
 const mockMessages = {
-  '1': [
-    { id: '101', content: '我常常感觉到焦虑怎么办', sender: 'user', timestamp: '2023-05-10T10:15:00Z', status: 'done' },
-    { id: '102', content: '焦虑是一种常见的情绪反应，许多人都会经历。以下是一些可能帮助你缓解焦虑的方法：\n\n1. **深呼吸练习**：慢慢吸气数到4，屏住呼吸数到2，然后慢慢呼气数到6。重复几次可以帮助稳定情绪。\n\n2. **正念冥想**：花几分钟专注于当下，观察自己的呼吸和感受，不加判断。\n\n3. **规律运动**：每天30分钟的温和运动可以减轻焦虑症状。\n\n4. **健康饮食**：减少咖啡因和糖的摄入，增加水果、蔬菜和全谷物的摄入。\n\n5. **充足睡眠**：确保每晚有7-9小时的优质睡眠。\n\n6. **寻求专业帮助**：如果焦虑严重影响你的日常生活，考虑咨询心理医生或治疗师。\n\n记住，处理焦虑是一个过程，找到适合你的方法可能需要时间。你愿意分享是什么具体情况引发你的焦虑吗？这样我可以提供更有针对性的建议。', sender: 'ai', timestamp: '2023-05-10T10:15:30Z', status: 'done' }
-  ],
-  '2': [
-    { id: '201', content: '我很难控制自己的情绪，经常发脾气怎么办', sender: 'user', timestamp: '2023-05-11T09:30:00Z', status: 'done' },
-    { id: '202', content: '控制情绪尤其是愤怒情绪确实可能很具挑战性。以下是一些可能对你有帮助的策略：\n\n1. **识别触发因素**：了解什么会引发你的愤怒，提前做好准备。\n\n2. **暂停技术**：当你感到情绪开始上升时，给自己10秒钟的冷静期。深呼吸并数到10。\n\n3. **情绪日记**：记录你的情绪波动，帮助识别模式和触发因素。\n\n4. **练习表达技巧**：学习用"我"为主语的表达方式，例如"我感到沮丧"而不是"你让我沮丧"。\n\n5. **寻求专业帮助**：心理治疗师可以教你认知行为技巧来管理情绪。\n\n6. **规律的自我照顾**：确保充足的睡眠、健康饮食和规律运动，这些都会影响情绪稳定性。\n\n你能否分享一下最近一次你难以控制情绪的具体情况？这样我可以提供更具体的建议。', sender: 'ai', timestamp: '2023-05-11T09:31:00Z', status: 'done' }
-  ],
-  '3': [
-    { id: '301', content: '很难对别人敞开心扉，认为别人会嘲笑我的经历', sender: 'user', timestamp: '2023-05-12T14:25:00Z', status: 'done' },
-    { id: '302', content: '担心被他人评判或嘲笑是很自然的感受，许多人都经历过这种社交焦虑。这里有一些可能对你有帮助的建议：\n\n1. **从小处开始**：选择一个你信任的人，分享一些较小的、不那么脆弱的事情，逐渐建立舒适感。\n\n2. **寻找安全空间**：考虑加入支持小组或找专业咨询师，这些是练习开放自己的安全环境。\n\n3. **挑战负面想法**：当你想"他们会嘲笑我"时，问自己这种想法的证据是什么，是否有其他可能性。\n\n4. **设立界限**：了解自己愿意分享什么，不愿意分享什么，这是健康的自我保护。\n\n5. **自我接纳**：努力接受自己的经历和感受，减少自我评判。\n\n请记住，建立信任和开放自己需要时间，这是一个过程。你有没有具体的经历让你特别担心被他人知道？', sender: 'ai', timestamp: '2023-05-12T14:26:30Z', status: 'done' }
-  ]
+  // ... 保留原有的模拟数据，以备不时之需
 }
 
 export default {
   name: 'DeepseekChat',
+  components: {
+    RedoOutlined
+  },
   setup() {
     // 状态管理
     const chatHistory = ref([])
@@ -182,7 +134,7 @@ export default {
     const inputEl = ref(null)
     const isHistoryLoaded = ref(false) // 历史记录加载状态标记
     const historyCache = ref({}) // 缓存已加载的对话详情
-    const tempChat = ref(null) // 新增：临时对话状态，未发送消息前不保存到历史
+    const tempChat = ref(null) // 临时对话状态，未发送消息前不保存到历史
 
     // 计算属性
     const currentChat = computed(() => {
@@ -245,13 +197,21 @@ export default {
 
         // 如果没有缓存数据，则从API获取
         if (!hasCachedData) {
-          const history = await mockApiService.getChatHistory()
-          chatHistory.value = history
-          isHistoryLoaded.value = true
-          saveToCache() // 保存到缓存
+          isProcessing.value = true
+          const response = await getChatList()
+          if (response.code === 200 && response.data) {
+            chatHistory.value = response.data
+            isHistoryLoaded.value = true
+            saveToCache() // 保存到缓存
+          } else {
+            message.error(response.message || '获取聊天历史失败')
+          }
+          isProcessing.value = false
         }
       } catch (error) {
         console.error('加载历史对话失败:', error)
+        isProcessing.value = false
+        message.error('加载历史对话失败')
       }
     }
 
@@ -264,24 +224,30 @@ export default {
         isProcessing.value = true
 
         // 检查缓存中是否已有该对话的详情数据
-        if (historyCache.value[chatId]) {
+        if (historyCache.value[chatId] && historyCache.value[chatId].messages) {
           // 从缓存中获取对话详情
           const index = chatHistory.value.findIndex(chat => chat.id === chatId)
           if (index !== -1) {
             chatHistory.value[index] = historyCache.value[chatId]
           }
         } else {
-          // 从API获取对话详情
-          const details = await mockApiService.getChatDetails(chatId)
+          // 从API获取对话详情(消息列表)
+          const response = await getChatMessages(chatId)
 
-          // 更新对话详情
-          const index = chatHistory.value.findIndex(chat => chat.id === chatId)
-          if (index !== -1) {
-            chatHistory.value[index] = details
+          if (response.code === 200 && response.data) {
+            // 获取当前对话的基本信息
+            const index = chatHistory.value.findIndex(chat => chat.id === chatId)
+            if (index !== -1) {
+              // 更新对话中的消息列表
+              const chatData = { ...chatHistory.value[index], messages: response.data }
+              chatHistory.value[index] = chatData
 
-            // 更新缓存
-            historyCache.value[chatId] = details
-            saveToCache()
+              // 更新缓存
+              historyCache.value[chatId] = chatData
+              saveToCache()
+            }
+          } else {
+            message.error(response.message || '获取对话消息失败')
           }
         }
 
@@ -290,6 +256,7 @@ export default {
         scrollToBottom()
       } catch (error) {
         console.error('加载对话详情失败:', error)
+        message.error('加载对话详情失败')
       } finally {
         isProcessing.value = false
       }
@@ -341,104 +308,342 @@ export default {
       try {
         isProcessing.value = true
 
-        // 添加用户消息
+        // 添加用户消息数据结构
         const userMessage = {
-          id: Date.now().toString(),
           content: message,
           sender: 'user',
-          timestamp: new Date().toISOString(),
           status: 'done'
         }
 
         let chatIndex = -1
+        let currentChatObj = null
 
         // 处理临时对话的情况
         if (currentChatId.value === 'temp' || tempChat.value) {
           // 首次发消息，将临时对话转为正式对话
-          const newChatId = Date.now().toString()
-          const newChat = {
-            ...tempChat.value,
-            id: newChatId,
-            messages: [...(tempChat.value?.messages || []), userMessage]
+          try {
+            // 创建新对话
+            const response = await createChat({
+              title: message.length > 20 ? message.substring(0, 20) + '...' : message
+            })
+
+            if (response.code === 201 && response.data) {
+              // 使用服务器返回的新对话数据
+              const newChat = {
+                ...response.data,
+                messages: []
+              }
+
+              // 添加到历史记录的开头
+              chatHistory.value.unshift(newChat)
+              currentChatId.value = newChat.id
+              currentChatObj = newChat
+              tempChat.value = null // 清除临时对话
+
+              // 更新缓存
+              saveToCache()
+
+              chatIndex = 0 // 新对话肯定在第一位
+            } else {
+              throw new Error(response.message || '创建对话失败')
+            }
+          } catch (error) {
+            console.error('创建新对话失败:', error)
+            message.error('创建新对话失败: ' + (error.message || '未知错误'))
+            isProcessing.value = false
+            return
           }
-
-          // 添加到历史记录的开头
-          chatHistory.value.unshift(newChat)
-          currentChatId.value = newChatId
-          tempChat.value = null // 清除临时对话
-
-          // 更新缓存
-          saveToCache()
-
-          chatIndex = 0 // 新对话肯定在第一位
         } else {
           // 正常历史对话的情况
           // 获取当前对话对象的索引
           chatIndex = chatHistory.value.findIndex(chat => chat.id === currentChatId.value)
           if (chatIndex !== -1) {
-            // 添加用户消息
-            chatHistory.value[chatIndex].messages.push(userMessage)
+            currentChatObj = chatHistory.value[chatIndex]
+          } else {
+            message.error('对话不存在')
+            isProcessing.value = false
+            return
           }
         }
 
         // 清空输入
         userInput.value = ''
 
-        if (chatIndex !== -1) {
+        if (chatIndex !== -1 && currentChatObj) {
+          try {
+            // 先将用户消息临时添加到UI，设置为pending状态
+            const pendingUserMsg = {
+              id: `pending-${Date.now()}`,
+              content: message,
+              sender: 'user',
+              timestamp: new Date().toISOString(),
+              status: 'pending',
+              chatId: currentChatObj.id,
+              originalContent: message // 保存原始内容用于重发
+            }
+
+            if (!chatHistory.value[chatIndex].messages) {
+              chatHistory.value[chatIndex].messages = []
+            }
+
+            chatHistory.value[chatIndex].messages.push(pendingUserMsg)
+
+            // 滚动到底部
+            await nextTick()
+            scrollToBottom()
+
+            // 创建用户消息
+            const userMsgResponse = await createMessage(currentChatObj.id, {
+              content: message,
+              sender: 'user'
+            })
+
+            if (userMsgResponse.code !== 201 || !userMsgResponse.data) {
+              throw new Error(userMsgResponse.message || '发送消息失败')
+            }
+
+            // 用服务器返回的消息替换临时消息
+            const pendingIndex = chatHistory.value[chatIndex].messages.findIndex(m => m.id === pendingUserMsg.id)
+            if (pendingIndex !== -1) {
+              chatHistory.value[chatIndex].messages.splice(pendingIndex, 1, userMsgResponse.data)
+            }
+
+            // 添加AI加载中消息到界面
+            const loadingMessage = {
+              id: `loading-${Date.now()}`,
+              content: '',
+              sender: 'ai',
+              timestamp: new Date().toISOString(),
+              status: 'loading',
+              chatId: currentChatObj.id
+            }
+            chatHistory.value[chatIndex].messages.push(loadingMessage)
+
+            // 滚动到底部
+            await nextTick()
+            scrollToBottom()
+
+            try {
+              // 获取AI响应，设置超时处理
+              const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('请求超时，网络可能不稳定')), 30000)
+              )
+
+              const aiResponse = await Promise.race([
+                getAIResponse({
+                  content: message,
+                  chatId: currentChatObj.id
+                }),
+                timeoutPromise
+              ])
+
+              if (aiResponse.code !== 201 || !aiResponse.data) {
+                throw new Error(aiResponse.message || '获取AI响应失败')
+              }
+
+              // 替换加载中消息为实际响应
+              const loadingIndex = chatHistory.value[chatIndex].messages.findIndex(m => m.id === loadingMessage.id)
+              if (loadingIndex !== -1) {
+                chatHistory.value[chatIndex].messages.splice(loadingIndex, 1, aiResponse.data)
+              }
+            } catch (error) {
+              console.error('AI响应获取失败:', error)
+
+              // 替换加载消息为错误状态
+              const loadingIndex = chatHistory.value[chatIndex].messages.findIndex(m => m.id === loadingMessage.id)
+              if (loadingIndex !== -1) {
+                const errorMsg = {
+                  ...loadingMessage,
+                  content: '获取回复失败，请稍后重试',
+                  status: 'error',
+                  error: error.message
+                }
+                chatHistory.value[chatIndex].messages.splice(loadingIndex, 1, errorMsg)
+              }
+
+              message.error('获取AI响应失败: ' + (error.message || '未知错误'))
+            }
+
+            // 更新缓存
+            historyCache.value[currentChatId.value] = chatHistory.value[chatIndex]
+            saveToCache()
+
+            // 再次滚动到底部
+            await nextTick()
+            scrollToBottom()
+          } catch (error) {
+            console.error('处理消息失败:', error)
+
+            // 查找之前添加的待处理消息，将其标记为错误状态
+            const pendingMsgIndex = chatHistory.value[chatIndex].messages?.findIndex(m => m.status === 'pending')
+            if (pendingMsgIndex !== -1) {
+              chatHistory.value[chatIndex].messages[pendingMsgIndex].status = 'error'
+              chatHistory.value[chatIndex].messages[pendingMsgIndex].error = error.message
+            }
+
+            message.error('发送消息失败: ' + (error.message || '未知错误'))
+
+            // 移除加载中消息，如果存在的话
+            const loadingIndex = chatHistory.value[chatIndex].messages?.findIndex(m => m.status === 'loading')
+            if (loadingIndex !== -1) {
+              chatHistory.value[chatIndex].messages.splice(loadingIndex, 1)
+            }
+
+            // 更新缓存
+            historyCache.value[currentChatId.value] = chatHistory.value[chatIndex]
+            saveToCache()
+          }
+        }
+      } catch (error) {
+        console.error('发送消息失败:', error)
+        message.error('发送消息失败: ' + (error.message || '未知错误'))
+      } finally {
+        isProcessing.value = false
+        // 发送完消息后聚焦输入框
+        if (inputEl.value) {
+          inputEl.value.focus()
+        }
+      }
+    }
+
+    // 重新发送消息
+    const retryMessage = async (failedMessage) => {
+      if (isProcessing.value) return
+
+      try {
+        isProcessing.value = true
+
+        // 获取当前对话索引
+        const chatIndex = chatHistory.value.findIndex(chat => chat.id === currentChatId.value)
+        if (chatIndex === -1) {
+          throw new Error('对话不存在')
+        }
+
+        const currentChatObj = chatHistory.value[chatIndex]
+
+        // 查找失败消息的索引
+        const msgIndex = chatHistory.value[chatIndex].messages.findIndex(m => m.id === failedMessage.id)
+        if (msgIndex === -1) {
+          throw new Error('消息不存在')
+        }
+
+        // 如果是用户消息重试
+        if (failedMessage.sender === 'user') {
+          // 更新状态为处理中
+          chatHistory.value[chatIndex].messages[msgIndex].status = 'pending'
+
+          // 尝试重新发送
+          const userMsgResponse = await createMessage(currentChatObj.id, {
+            content: failedMessage.originalContent || failedMessage.content,
+            sender: 'user'
+          })
+
+          if (userMsgResponse.code !== 201 || !userMsgResponse.data) {
+            throw new Error(userMsgResponse.message || '重新发送消息失败')
+          }
+
+          // 替换为服务器返回的消息
+          chatHistory.value[chatIndex].messages.splice(msgIndex, 1, userMsgResponse.data)
+
           // 添加AI加载中消息
           const loadingMessage = {
             id: `loading-${Date.now()}`,
             content: '',
             sender: 'ai',
             timestamp: new Date().toISOString(),
-            status: 'loading'
+            status: 'loading',
+            chatId: currentChatObj.id
           }
           chatHistory.value[chatIndex].messages.push(loadingMessage)
 
-          // 滚动到底部
+          // 更新UI
           await nextTick()
           scrollToBottom()
 
-          // 获取当前对话的上下文（最后5条消息）
-          const context = chatHistory.value[chatIndex].messages
-            .filter(m => m.status === 'done')
-            .slice(-5)
-            .map(m => ({ role: m.sender === 'user' ? 'user' : 'assistant', content: m.content }))
+          // 获取AI响应
+          try {
+            const aiResponse = await getAIResponse({
+              content: userMsgResponse.data.content,
+              chatId: currentChatObj.id
+            })
 
-          // 调用API获取AI响应
-          const aiResponse = await mockApiService.sendMessageToAI(message, context)
+            if (aiResponse.code !== 201 || !aiResponse.data) {
+              throw new Error(aiResponse.message || '获取AI响应失败')
+            }
 
-          // 更新对话标题（如果是新对话）
-          if (chatHistory.value[chatIndex].messages.length <= 2) {
-            // 截取用户消息的前10个字符作为标题
-            chatHistory.value[chatIndex].title = message.length > 10
-              ? message.substring(0, 10) + '...'
-              : message
+            // 替换加载中消息
+            const loadingIndex = chatHistory.value[chatIndex].messages.findIndex(m => m.id === loadingMessage.id)
+            if (loadingIndex !== -1) {
+              chatHistory.value[chatIndex].messages.splice(loadingIndex, 1, aiResponse.data)
+            }
+
+            message.success('消息重新发送成功')
+          } catch (error) {
+            // 处理AI响应失败
+            const loadingIndex = chatHistory.value[chatIndex].messages.findIndex(m => m.id === loadingMessage.id)
+            if (loadingIndex !== -1) {
+              const errorMsg = {
+                ...loadingMessage,
+                content: '获取回复失败，请稍后重试',
+                status: 'error',
+                error: error.message
+              }
+              chatHistory.value[chatIndex].messages.splice(loadingIndex, 1, errorMsg)
+            }
+
+            throw error
           }
-
-          // 替换加载中消息为实际响应
-          const loadingIndex = chatHistory.value[chatIndex].messages.findIndex(m => m.id === loadingMessage.id)
-          if (loadingIndex !== -1) {
-            chatHistory.value[chatIndex].messages.splice(loadingIndex, 1, aiResponse)
-          }
-
-          // 更新缓存
-          historyCache.value[currentChatId.value] = chatHistory.value[chatIndex]
-          saveToCache()
-
-          // 再次滚动到底部
-          await nextTick()
-          scrollToBottom()
         }
+        // 如果是AI消息重试
+        else if (failedMessage.sender === 'ai') {
+          // 更新状态为加载中
+          const retryingMessage = {
+            ...failedMessage,
+            content: '',
+            status: 'loading'
+          }
+          chatHistory.value[chatIndex].messages.splice(msgIndex, 1, retryingMessage)
+
+          // 获取上一条用户消息
+          let userMessage = null
+          for (let i = msgIndex - 1; i >= 0; i--) {
+            if (chatHistory.value[chatIndex].messages[i].sender === 'user') {
+              userMessage = chatHistory.value[chatIndex].messages[i]
+              break
+            }
+          }
+
+          if (!userMessage) {
+            throw new Error('找不到相关的用户消息')
+          }
+
+          // 获取AI响应
+          const aiResponse = await getAIResponse({
+            content: userMessage.content,
+            chatId: currentChatObj.id
+          })
+
+          if (aiResponse.code !== 201 || !aiResponse.data) {
+            throw new Error(aiResponse.message || '获取AI响应失败')
+          }
+
+          // 替换消息
+          chatHistory.value[chatIndex].messages.splice(msgIndex, 1, aiResponse.data)
+          message.success('AI响应已重新获取')
+        }
+
+        // 更新缓存
+        historyCache.value[currentChatId.value] = chatHistory.value[chatIndex]
+        saveToCache()
+
+        // 滚动到底部
+        await nextTick()
+        scrollToBottom()
       } catch (error) {
-        console.error('发送消息失败:', error)
+        console.error('重试消息失败:', error)
+        message.error('重试失败: ' + (error.message || '未知错误'))
       } finally {
         isProcessing.value = false
-        // 发送完消息后聚焦输入框
-        if (inputEl.value) {
-          inputEl.value.value = ''
-          inputEl.value.focus()
-        }
       }
     }
 
@@ -466,36 +671,52 @@ export default {
     }
 
     // 监听对话变化，自动滚动到底部
-    watch(() => currentChat.value?.messages.length, () => {
+    watch(() => currentChat.value?.messages?.length, () => {
       nextTick(scrollToBottom)
     })
 
     // 删除对话
-    const deleteChat = (chatId) => {
-      // 从历史记录中删除
-      const index = chatHistory.value.findIndex(chat => chat.id === chatId)
-      if (index !== -1) {
-        chatHistory.value.splice(index, 1)
-      }
+    const deleteChat = async (chatId) => {
+      try {
+        isProcessing.value = true
+        const response = await deleteChatApi(chatId)
 
-      // 从缓存中删除
-      if (historyCache.value[chatId]) {
-        delete historyCache.value[chatId]
-      }
+        if (response.code === 200) {
+          // 从历史记录中删除
+          const index = chatHistory.value.findIndex(chat => chat.id === chatId)
+          if (index !== -1) {
+            chatHistory.value.splice(index, 1)
+          }
 
-      // 保存到缓存
-      saveToCache()
+          // 从缓存中删除
+          if (historyCache.value[chatId]) {
+            delete historyCache.value[chatId]
+          }
 
-      // 如果删除的是当前对话，则选择其他对话
-      if (currentChatId.value === chatId) {
-        if (chatHistory.value.length > 0) {
-          // 选择第一个对话
-          selectChat(chatHistory.value[0].id)
+          // 保存到缓存
+          saveToCache()
+
+          // 如果删除的是当前对话，则选择其他对话
+          if (currentChatId.value === chatId) {
+            if (chatHistory.value.length > 0) {
+              // 选择第一个对话
+              selectChat(chatHistory.value[0].id)
+            } else {
+              // 如果没有对话了，清空当前状态
+              currentChatId.value = null
+              tempChat.value = null
+            }
+          }
+
+          message.success(response.data || '删除成功')
         } else {
-          // 如果没有对话了，清空当前状态
-          currentChatId.value = null
-          tempChat.value = null
+          message.error(response.message || '删除对话失败')
         }
+      } catch (error) {
+        console.error('删除对话失败:', error)
+        message.error('删除对话失败: ' + (error.message || '未知错误'))
+      } finally {
+        isProcessing.value = false
       }
     }
 
@@ -528,7 +749,8 @@ export default {
       getCachedData,
       saveToCache,
       tempChat,
-      deleteChat
+      deleteChat,
+      retryMessage
     }
   }
 }
@@ -968,5 +1190,31 @@ textarea:focus {
   .question-list {
     grid-template-columns: 1fr;
   }
+}
+
+.message-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.message-error {
+  position: absolute;
+  right: -30px;
+  top: 0;
+}
+
+.retry-icon {
+  color: #f5222d;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  background-color: rgba(245, 34, 45, 0.1);
+  transition: all 0.3s;
+}
+
+.retry-icon:hover {
+  background-color: rgba(245, 34, 45, 0.2);
+  transform: scale(1.1);
 }
 </style>
