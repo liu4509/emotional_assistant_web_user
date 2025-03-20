@@ -119,7 +119,7 @@ const onFinish = async (values) => {
     if (result.success) {
       message.success('登录成功')
       // 登录成功后重定向到首页或者之前的页面
-      router.push('/')
+      router.push('/survey')
     } else {
       message.error(result.message || '登录失败')
     }

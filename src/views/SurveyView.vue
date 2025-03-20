@@ -3,37 +3,31 @@
     <a-card title="心情测评问卷" :bordered="false">
       <a-alert v-if="!isLoggedIn" type="warning" message="请先登录后参与测评" banner />
 
-      <a-form
-        v-else
-        :model="formState"
-        @finish="handleSubmit"
-        :label-col="{ span: 24 }"
-        :wrapper-col="{ span: 24 }"
-      >
-        <a-form-item
-          v-for="(question, index) in currentSurvey.questions"
-          :key="index"
-          :label="question.title"
-          :label-col="{ span: 24 }"
-          :wrapper-col="{ span: 24 }"
-        >
-          <a-radio-group
-            v-if="question.type === 'radio'"
-            v-model:value="formState.answers[index]"
-            style="display: flex; flex-direction: column; gap: 8px"
-          >
-            <a-radio
-              v-for="(option, oIndex) in question.options"
-              :key="oIndex"
-              :value="option.score"
-            >
-              {{ option.label }}
+      <div v-else-if="isLoading" class="loading-container">
+        <a-spin tip="加载问卷中..." />
+      </div>
+
+      <div v-else-if="loadError" class="error-container">
+        <a-alert type="error" :message="loadError" banner />
+        <a-button type="primary" @click="fetchRandomQuestionnaire" style="margin-top: 16px">重试</a-button>
+      </div>
+
+      <a-form v-else :model="formState" @finish="handleSubmit" :label-col="{ span: 24 }" :wrapper-col="{ span: 24 }">
+        <h3 v-if="currentSurvey.title">{{ currentSurvey.title }}</h3>
+        <p v-if="currentSurvey.description" class="survey-description">{{ currentSurvey.description }}</p>
+
+        <a-form-item v-for="(question, index) in currentSurvey.questions" :key="question.id" :label="question.content"
+          :name="['answers', index]" :rules="[{ required: true, message: '请选择一个选项' }]">
+          <a-radio-group v-model:value="formState.answers[index]"
+            style="display: flex; flex-direction: column; gap: 8px">
+            <a-radio v-for="option in question.options" :key="option.id" :value="option.score">
+              {{ option.content }}
             </a-radio>
           </a-radio-group>
         </a-form-item>
 
-        <a-form-item :wrapper-col="{ offset: 6 }">
-          <a-button type="primary" html-type="submit">提交问卷</a-button>
+        <a-form-item :wrapper-col="{ span: 24 }" style="text-align: center; margin-top: 24px;">
+          <a-button type="primary" html-type="submit" :loading="isSubmitting">提交问卷</a-button>
         </a-form-item>
       </a-form>
 
@@ -57,83 +51,19 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
+import { getQuestionnaireRandomId } from '@/api/questionnaire'
 
 const router = useRouter()
 
-// 模拟问卷数据（实际应从接口获取）
+// 状态变量
 const currentSurvey = reactive({
-  id: 1,
-  questions: [
-    {
-      type: 'radio',
-      title: '最近一周内，你感到愉快的时间占比多少？',
-      options: [
-        { label: '超过80%', score: 5 },
-        { label: '50%-80%', score: 4 },
-        { label: '30%-50%', score: 3 },
-        { label: '低于30%', score: 2 },
-        { label: '几乎没有', score: 1 },
-      ],
-    },
-    {
-      type: 'radio',
-      title: '您现在感觉如何？',
-      options: [
-        { label: '非常快乐', score: 5 },
-        { label: '快乐', score: 4 },
-        { label: '一般', score: 3 },
-        { label: '悲伤', score: 2 },
-        { label: '非常悲伤', score: 1 },
-      ],
-    },
-    {
-      type: 'radio',
-      title: '您是否感到焦虑或紧张？',
-      options: [
-        { label: '从不', score: 5 },
-        { label: '很少', score: 4 },
-        { label: '有时', score: 3 },
-        { label: '经常', score: 2 },
-        { label: '总是', score: 1 },
-      ],
-    },
-    {
-      type: 'radio',
-      title: '您现在的心情是平静的还是烦躁的？',
-      options: [
-        { label: '非常平静', score: 5 },
-        { label: '平静', score: 4 },
-        { label: '一般', score: 3 },
-        { label: '烦躁', score: 2 },
-        { label: '非常烦躁', score: 1 },
-      ],
-    },
-    {
-      type: 'radio',
-      title: '您对未来的态度是乐观的还是悲观的？',
-      options: [
-        { label: '非常乐观', score: 5 },
-        { label: '乐观', score: 4 },
-        { label: '中立', score: 3 },
-        { label: '悲观', score: 2 },
-        { label: '非常悲观', score: 1 },
-      ],
-    },
-    {
-      type: 'radio',
-      title: '您现在是否有压力感？',
-      options: [
-        { label: '没有压力', score: 5 },
-        { label: '轻微压力', score: 4 },
-        { label: '中等压力', score: 3 },
-        { label: '较大压力', score: 2 },
-        { label: '极大压力', score: 1 },
-      ],
-    },
-  ],
+  id: null,
+  title: '',
+  description: '',
+  questions: [],
   scoreRanges: {
     veryPositive: [21, 25],
     positive: [17, 20],
@@ -147,8 +77,40 @@ const formState = reactive({
   answers: [],
 })
 
+const isLoading = ref(false)
+const isSubmitting = ref(false)
+const loadError = ref('')
 const showResult = ref(false)
 const totalScore = ref(0)
+
+// 请求随机问卷
+const fetchRandomQuestionnaire = async () => {
+  isLoading.value = true
+  loadError.value = ''
+  formState.answers = []
+
+  try {
+    const response = await getQuestionnaireRandomId()
+
+    if (response.code === 200 && response.data) {
+      // 更新问卷数据
+      currentSurvey.id = response.data.id
+      currentSurvey.title = response.data.title
+      currentSurvey.description = response.data.description
+      currentSurvey.questions = response.data.questions
+
+      // 初始化答案数组
+      formState.answers = new Array(response.data.questions.length).fill(null)
+    } else {
+      loadError.value = response.message || '获取问卷失败'
+    }
+  } catch (error) {
+    console.error('获取问卷失败:', error)
+    loadError.value = '获取问卷失败，请重试'
+  } finally {
+    isLoading.value = false
+  }
+}
 
 const resultTitle = computed(() => {
   if (totalScore.value >= 21) return '非常积极 🎉'
@@ -179,7 +141,7 @@ const recommendations = computed(() => {
     ],
     veryNegative: [
       { title: '心理辅导', route: '/training', description: '专业调节训练' },
-      { title: '咨询问答', route: '/qa', description: '解答您的困惑' },
+      { title: '咨询问答', route: '/chat', description: '解答您的困惑' },
     ],
   }
 
@@ -197,10 +159,29 @@ const recommendations = computed(() => {
 const isLoggedIn = ref(true) // 实际应连接登录状态
 
 const handleSubmit = () => {
-  totalScore.value = formState.answers.reduce((sum, score) => sum + score, 0)
-  showResult.value = true
-  message.success('问卷提交成功！')
+  // 验证所有问题是否都已回答
+  if (formState.answers.some(answer => answer === null)) {
+    message.warning('请回答所有问题')
+    return
+  }
+
+  isSubmitting.value = true
+
+  // 计算总分
+  totalScore.value = formState.answers.reduce((sum, score) => sum + (score || 0), 0)
+
+  // 模拟提交到服务器的延迟
+  setTimeout(() => {
+    isSubmitting.value = false
+    showResult.value = true
+    message.success('问卷提交成功！')
+  }, 500)
 }
+
+// 页面加载时获取随机问卷
+onMounted(() => {
+  fetchRandomQuestionnaire()
+})
 </script>
 
 <style scoped>
@@ -208,6 +189,20 @@ const handleSubmit = () => {
   padding: 24px;
   max-width: 800px;
   margin: 0 auto;
+}
+
+.loading-container,
+.error-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 0;
+}
+
+.survey-description {
+  margin-bottom: 24px;
+  color: rgba(0, 0, 0, 0.65);
 }
 
 .recommendation-section {

@@ -1,148 +1,158 @@
 <template>
   <a-layout class="training-container">
     <a-card :title="currentScene.title" :bordered="false">
-      <a-alert
-        v-if="showRetryAlert"
-        type="warning"
-        message="建议选择更积极的应对方式"
-        banner
-        style="margin-bottom: 16px"
-      />
-
-      <div class="scene-description">
-        {{ currentScene.description }}
+      <div v-if="isLoading" class="loading-container">
+        <a-spin tip="加载训练场景中..." />
       </div>
 
-      <a-radio-group v-model:value="selectedOption" vertical style="margin: 24px 0">
-        <a-radio
-          v-for="option in currentScene.options"
-          :key="option.id"
-          :value="option.id"
-          :class="{
-            'best-option': option.isBest && showBestHint,
-            'error-option': isWrongChoice,
-          }"
-        >
-          {{ option.text }}
-        </a-radio>
-      </a-radio-group>
+      <div v-else-if="loadError" class="error-container">
+        <a-alert type="error" :message="loadError" banner />
+        <a-button type="primary" @click="fetchRandomScenario" style="margin-top: 16px">重试</a-button>
+      </div>
 
-      <a-button type="primary" :disabled="!selectedOption" @click="handleAnswer">
-        {{ isLastStep ? '完成训练' : '下一步' }}
-      </a-button>
+      <template v-else>
+        <a-alert v-if="showRetryAlert" type="warning" message="建议选择更积极的应对方式" banner style="margin-bottom: 16px" />
 
-      <a-modal v-model:visible="showResult" title="训练结果" :footer="null" width="800px">
-        <a-typography-title :level="4">
-          您的得分：{{ totalScore }} / {{ maxScore }}
-        </a-typography-title>
-        <div class="result-feedback">
-          {{ resultFeedback }}
+        <div class="scene-description">
+          {{ currentScene.description }}
         </div>
-        <a-button type="primary" @click="restartTraining" style="margin-top: 16px">
-          重新开始训练
-        </a-button>
-      </a-modal>
+
+        <div v-if="currentQuestionIndex < currentScene.questions.length">
+          <h3 class="question-title">{{ currentQuestion.content }}</h3>
+
+          <a-radio-group v-model:value="selectedOption" vertical style="margin: 24px 0">
+            <a-radio v-for="option in currentQuestion.options" :key="option.id" :value="option.id" :class="{
+              'best-option': option.is_correct && showBestHint,
+              'error-option': isWrongChoice && selectedOption === option.id,
+            }">
+              {{ option.content }}
+            </a-radio>
+          </a-radio-group>
+
+          <a-button type="primary" :disabled="!selectedOption" @click="handleAnswer">
+            {{ isLastQuestion ? '完成训练' : '下一步' }}
+          </a-button>
+        </div>
+
+        <a-modal v-model:visible="showResult" title="训练结果" :footer="null" width="800px" @afterClose="handleModalClose">
+          <a-typography-title :level="4">
+            您的得分：{{ totalScore }} 总分：{{ maxScore }}
+          </a-typography-title>
+          <div class="result-feedback">
+            {{ resultFeedback }}
+          </div>
+          <a-button type="primary" @click="restartTraining" style="margin-top: 16px">
+            重新开始训练
+          </a-button>
+        </a-modal>
+      </template>
     </a-card>
   </a-layout>
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
+import { getRandomScenario } from '@/api/scenario'
 
-// 场景数据结构示例
-const trainingData = reactive({
-  scenes: {
-    scene1: {
-      id: 'scene1',
-      title: '工作汇报压力应对',
-      description:
-        '假设你正在准备一个重要的工作汇报，但在汇报前，你得知了些可能影响你情绪的负面消息...',
-      options: [
-        {
-          id: 'option1',
-          text: '开始焦虑，惶恐难安',
-          // TODO: 不使用分值 直接恭喜 该功能在于引导用户正确选项来指导行为
-          score: 1,
-          isBest: false,
-          next: 'scene2',
-        },
-        {
-          id: 'option2',
-          text: '立即思考如何应对负面消息',
-          score: 3,
-          isBest: true,
-          next: 'scene2',
-        },
-      ],
-    },
-    scene2: {
-      id: 'scene2',
-      title: '情绪调整策略选择',
-      description: '你决定通过哪种方式调整情绪?',
-      options: [
-        {
-          id: 'option3',
-          text: '认知改变: 将挑战视为机遇',
-          score: 3,
-          isBest: true,
-          next: 'end',
-        },
-        {
-          id: 'option4',
-          text: '情绪低落想要放弃',
-          score: 1,
-          isBest: false,
-          next: 'end',
-        },
-      ],
-    },
-  },
-  startScene: 'scene1',
+// 状态变量
+const currentScene = reactive({
+  id: null,
+  title: '',
+  description: '',
+  questions: []
 })
 
-const currentSceneId = ref(trainingData.startScene)
+const isLoading = ref(false)
+const loadError = ref('')
+const currentQuestionIndex = ref(0)
 const selectedOption = ref(null)
 const answerHistory = reactive([])
 const showBestHint = ref(false)
 const showRetryAlert = ref(false)
 const retryCount = ref(0)
-const showResult = ref(false) // 定义 showResult
+const showResult = ref(false)
 
-const currentScene = computed(() => trainingData.scenes[currentSceneId.value])
+// 计算属性
+const currentQuestion = computed(() => {
+  if (!currentScene.questions.length || currentQuestionIndex.value >= currentScene.questions.length) {
+    return null
+  }
+  return currentScene.questions[currentQuestionIndex.value]
+})
+
+const isLastQuestion = computed(() => {
+  return currentQuestionIndex.value === currentScene.questions.length - 1
+})
 
 const isWrongChoice = computed(() => {
-  if (!selectedOption.value) return false
-  const option = currentScene.value.options.find((o) => o.id === selectedOption.value)
-  return !option.isBest
+  if (!selectedOption.value || !currentQuestion.value) return false
+  const option = currentQuestion.value.options.find(o => o.id === selectedOption.value)
+  return option && !option.is_correct
 })
 
-const isLastStep = computed(() => {
-  const option = currentScene.value.options.find((o) => o.id === selectedOption.value)
-  return option?.next === 'end'
-})
+// 请求随机场景
+const fetchRandomScenario = async () => {
+  isLoading.value = true
+  loadError.value = ''
+
+  try {
+    const response = await getRandomScenario()
+
+    if (response.code === 200 && response.data) {
+      // 更新场景数据
+      currentScene.id = response.data.id
+      currentScene.title = response.data.title
+      currentScene.description = response.data.description
+
+      // 排序问题（如果需要）
+      currentScene.questions = response.data.questions.sort((a, b) => a.order - b.order)
+
+      // 重置状态
+      currentQuestionIndex.value = 0
+      selectedOption.value = null
+      answerHistory.splice(0)
+      showBestHint.value = false
+      showRetryAlert.value = false
+      retryCount.value = 0
+    } else {
+      loadError.value = response.message || '获取训练场景失败'
+    }
+  } catch (error) {
+    console.error('获取训练场景失败:', error)
+    loadError.value = '获取训练场景失败，请重试'
+  } finally {
+    isLoading.value = false
+  }
+}
 
 const handleAnswer = () => {
-  const option = currentScene.value.options.find((o) => o.id === selectedOption.value)
+  if (!currentQuestion.value) return
 
-  if (!option.isBest && retryCount.value === 0) {
+  const option = currentQuestion.value.options.find(o => o.id === selectedOption.value)
+  if (!option) return
+
+  if (!option.is_correct && retryCount.value === 0) {
     showBestHint.value = true
     showRetryAlert.value = true
     retryCount.value += 1
     return
   }
 
+  // 记录答案
   answerHistory.push({
-    sceneId: currentSceneId.value,
+    questionId: currentQuestion.value.id,
     optionId: selectedOption.value,
-    score: option.score,
+    isCorrect: option.is_correct,
     isRetry: retryCount.value > 0,
   })
 
-  if (option.next === 'end') {
+  // 如果是最后一个问题，显示结果
+  if (isLastQuestion.value) {
     showResult.value = true
   } else {
-    currentSceneId.value = option.next
+    // 否则进入下一个问题
+    currentQuestionIndex.value += 1
     selectedOption.value = null
     showBestHint.value = false
     showRetryAlert.value = false
@@ -150,15 +160,17 @@ const handleAnswer = () => {
   }
 }
 
-// 评分计算相关逻辑
-const totalScore = computed(() => {
-  return answerHistory.reduce((sum, item) => sum + item.score, 0)
+// 评分计算
+const maxScore = computed(() => {
+  return 100
 })
 
-const maxScore = computed(() => {
-  return Object.values(trainingData.scenes).reduce((sum, scene) => {
-    return sum + Math.max(...scene.options.map((o) => o.score))
-  }, 0)
+const totalScore = computed(() => {
+  if (answerHistory.length === 0 || currentScene.questions.length === 0) return 0
+
+  const correctCount = answerHistory.filter(record => record.isCorrect).length
+  // 计算得分比例并换算为100分制，取整数，并确保不超过100分
+  return Math.min(100, Math.round((correctCount / currentScene.questions.length) * 100))
 })
 
 const resultFeedback = computed(() => {
@@ -169,12 +181,24 @@ const resultFeedback = computed(() => {
 })
 
 const restartTraining = () => {
-  currentSceneId.value = trainingData.startScene
+  currentQuestionIndex.value = 0
   selectedOption.value = null
   answerHistory.splice(0)
   showResult.value = false
+  showBestHint.value = false
+  showRetryAlert.value = false
   retryCount.value = 0
 }
+
+const handleModalClose = () => {
+  // 调用重置训练状态的方法
+  fetchRandomScenario()
+}
+
+// 页面加载时获取随机场景
+onMounted(() => {
+  fetchRandomScenario()
+})
 </script>
 
 <style scoped>
@@ -182,6 +206,15 @@ const restartTraining = () => {
   padding: 24px;
   max-width: 800px;
   margin: 0 auto;
+}
+
+.loading-container,
+.error-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 0;
 }
 
 .best-option {
@@ -201,6 +234,12 @@ const restartTraining = () => {
   margin: 16px 0;
   color: rgba(0, 0, 0, 0.85);
   line-height: 1.6;
+}
+
+.question-title {
+  font-size: 16px;
+  font-weight: 500;
+  margin: 20px 0 10px;
 }
 
 .result-feedback {
