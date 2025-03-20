@@ -90,13 +90,3 @@ export function sendVerifyCodeAPI(params) {
   })
 }
 
-/**
- * 退出登录
- * @returns {Promise}
- */
-export function logout() {
-  return request({
-    url: '/user/logout',
-    method: 'post',
-  })
-}

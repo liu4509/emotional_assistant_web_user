@@ -76,10 +76,16 @@
                 <template #title>
                   <div class="diary-header">
                     <span>{{ formatDate(item.createTime) }}</span>
-                    <a-button type="text" danger @click="confirmDeleteDiary(item.id)">
-                      <template #icon><delete-outlined /></template>
-                      删除
-                    </a-button>
+                    <div class="diary-actions">
+                      <a-button type="text" @click="openDiaryEditModal(item)" style="margin-right: 8px;">
+                        <template #icon><edit-outlined /></template>
+                        编辑
+                      </a-button>
+                      <a-button type="text" danger @click="confirmDeleteDiary(item.id)">
+                        <template #icon><delete-outlined /></template>
+                        删除
+                      </a-button>
+                    </div>
                   </div>
                 </template>
                 <template #description>
@@ -164,11 +170,27 @@
     },
     src: previewImageSrc
   }" />
+
+  <!-- 编辑日记对话框 -->
+  <a-modal v-model:visible="diaryEditModalVisible" title="编辑日记" @ok="saveDiaryEdit" :confirmLoading="diaryEditLoading">
+    <a-form :model="diaryEditForm" layout="vertical">
+      <a-form-item label="日记内容" name="content" :rules="[{ required: true, message: '请输入日记内容' }]">
+        <a-textarea v-model:value="diaryEditForm.content" :rows="4" placeholder="请输入日记内容" />
+      </a-form-item>
+      <a-form-item label="情绪标签" name="moodValues" :rules="[{ required: true, message: '请选择至少一种情绪' }]">
+        <a-select v-model:value="diaryEditForm.moodValues" mode="multiple" placeholder="请选择情绪标签" style="width: 100%">
+          <a-select-option v-for="mood in MOOD_CONFIG" :key="mood.value" :value="mood.value">
+            {{ mood.label }}
+          </a-select-option>
+        </a-select>
+      </a-form-item>
+    </a-form>
+  </a-modal>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount, computed } from 'vue'
-import { message } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import {
   UserOutlined,
   BookOutlined,
@@ -181,7 +203,7 @@ import {
   UploadOutlined,
 } from '@ant-design/icons-vue'
 import { getUserInfo, updateUserInfo, updateUserPassword, sendVerifyCodeAPI } from '@/api/user'
-import { getMyDiaries, deleteDiarie } from '@/api/diarie'
+import { getMyDiaries, deleteDiarie, updateDiarie } from '@/api/diarie'
 import { getMyClocks, deleteClock } from '@/api/clock'
 import { formatDate, uploadImageUtil } from '@/utils/utils'
 import { useUserStore } from '@/stores/user'
@@ -192,8 +214,6 @@ const userInfo = computed(() => userStore.userInfo || {})
 const activeKey = ref('1')
 const isEditing = ref(false)
 const defaultAvatar = 'https://zos.alipayobjects.com/rmsportal/ODTLcjxAfvqbxHnVXCYX.png'
-
-
 
 // 菜单切换
 const handleMenuSelect = ({ key }) => {
@@ -358,7 +378,20 @@ const loadUserInfo = async () => {
 
 // 情绪日记相关
 const diaries = ref([])
-
+const MOOD_CONFIG = [
+  { value: 'happy', label: '😊 快乐', score: 4 },
+  { value: 'bliss', label: '😇 幸福', score: 5 },
+  { value: 'excited', label: '🤩 兴奋', score: 4 },
+  { value: 'content', label: '😌 满足', score: 3 },
+  { value: 'relaxed', label: '🛀 轻松', score: 3 },
+  { value: 'calm', label: '🧘 平静', score: 1 },
+  { value: 'tired', label: '😴 疲惫', score: -1 },
+  { value: 'anxious', label: '😰 焦虑', score: -2 },
+  { value: 'frustrated', label: '😞 沮丧', score: -2 },
+  { value: 'sad', label: '😢 难过', score: -3 },
+  { value: 'grief', label: '😭 悲伤', score: -5 },
+  { value: 'angry', label: '😠 愤怒', score: -5 },
+]
 
 const getMoodColor = (moodValue) => {
   switch (moodValue) {
@@ -398,21 +431,28 @@ const loadDiaries = async () => {
   }
 }
 
-const confirmDeleteDiary = async (id) => {
-  if (confirm('确定要删除这条日记吗？')) {
-    try {
-      const result = await deleteDiarie(id)
-      if (result.code === 200 || result.code === 201) {
-        message.success(result.data || '日记删除成功')
-        loadDiaries() // 重新加载日记
-      } else {
-        message.error(result.message || '日记删除失败')
+const confirmDeleteDiary = (id) => {
+  Modal.confirm({
+    title: '确认删除',
+    content: '确定要删除这条日记吗？删除后将无法恢复。',
+    okText: '确认',
+    cancelText: '取消',
+    okType: 'danger',
+    async onOk() {
+      try {
+        const result = await deleteDiarie(id)
+        if (result.code === 200 || result.code === 201) {
+          message.success(result.data || '日记删除成功')
+          loadDiaries() // 重新加载日记
+        } else {
+          message.error(result.message || '日记删除失败')
+        }
+      } catch (error) {
+        console.error('删除日记错误:', error)
+        message.error('删除日记过程中出错')
       }
-    } catch (error) {
-      console.error('删除日记错误:', error)
-      message.error('删除日记过程中出错')
-    }
-  }
+    },
+  })
 }
 
 // 旅行打卡相关
@@ -439,20 +479,73 @@ const previewImage = (imageSrc) => {
   previewVisible.value = true
 }
 
-const confirmDeletePhoto = async (id) => {
-  if (confirm('确定要删除这张打卡照片吗？')) {
-    try {
-      const result = await deleteClock(id)
-      if (result.code === 200 || result.code === 201) {
-        message.success(result.data || '打卡删除成功')
-        loadPhotos() // 重新加载照片
-      } else {
-        message.error(result.message || '打卡删除失败')
+const confirmDeletePhoto = (id) => {
+  Modal.confirm({
+    title: '确认删除',
+    content: '确定要删除这张打卡照片吗？删除后将无法恢复。',
+    okText: '确认',
+    cancelText: '取消',
+    okType: 'danger',
+    async onOk() {
+      try {
+        const result = await deleteClock(id)
+        if (result.code === 200 || result.code === 201) {
+          message.success(result.data || '打卡删除成功')
+          loadPhotos() // 重新加载照片
+        } else {
+          message.error(result.message || '打卡删除失败')
+        }
+      } catch (error) {
+        console.error('删除打卡错误:', error)
+        message.error('删除打卡过程中出错')
       }
-    } catch (error) {
-      console.error('删除打卡错误:', error)
-      message.error('删除打卡过程中出错')
+    },
+  })
+}
+
+// 日记编辑相关
+const diaryEditModalVisible = ref(false)
+const diaryEditLoading = ref(false)
+const currentEditingDiaryId = ref(null)
+const diaryEditForm = reactive({
+  content: '',
+  moodValues: [],
+})
+
+// 打开编辑日记对话框
+const openDiaryEditModal = (diary) => {
+  currentEditingDiaryId.value = diary.id
+  diaryEditForm.content = diary.content
+  diaryEditForm.moodValues = diary.moods.map(mood => mood.value)
+  diaryEditModalVisible.value = true
+}
+
+// 保存日记编辑
+const saveDiaryEdit = async () => {
+  if (!diaryEditForm.content || !diaryEditForm.moodValues || diaryEditForm.moodValues.length === 0) {
+    message.error('请填写完整信息')
+    return
+  }
+
+  diaryEditLoading.value = true
+  try {
+    const result = await updateDiarie(currentEditingDiaryId.value, {
+      content: diaryEditForm.content,
+      moodValues: diaryEditForm.moodValues
+    })
+
+    if (result.code === 200 || result.code === 201) {
+      message.success(result.data || '日记更新成功')
+      diaryEditModalVisible.value = false
+      loadDiaries() // 重新加载日记
+    } else {
+      message.error(result.message || '日记更新失败')
     }
+  } catch (error) {
+    console.error('更新日记错误:', error)
+    message.error('更新日记过程中出错')
+  } finally {
+    diaryEditLoading.value = false
   }
 }
 
@@ -503,6 +596,10 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.diary-actions {
+  display: flex;
 }
 
 .diary-content {

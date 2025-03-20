@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { login as loginApi, register as registerApi, logout as logoutApi } from '@/api/user'
+import { login as loginApi, register as registerApi } from '@/api/user'
 
 export const useUserStore = defineStore('user', () => {
   const userInfo = ref(null)
@@ -43,7 +43,6 @@ export const useUserStore = defineStore('user', () => {
   // 退出登录
   const logout = async (router) => {
     try {
-      await logoutApi()
       resetUserState()
       if (router) {
         router.push('/login')
