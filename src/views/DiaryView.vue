@@ -16,7 +16,7 @@
           <a-textarea v-model:value="form.content" :rows="4" placeholder="记录今天发生的事..." />
         </a-form-item>
 
-        <a-button type="primary" html-type="submit">保存日记</a-button>
+        <a-button type="primary" html-type="submit" :loading="isSubmitting">保存日记</a-button>
       </a-form>
     </a-card>
 
@@ -32,10 +32,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import * as echarts from 'echarts'
 import { Alert, message } from 'ant-design-vue'
 import dayjs from 'dayjs'
+import { getMyDiaries, createDiarie } from '@/api/diarie'
 
 // 心情标签配置
 const MOOD_CONFIG = [
@@ -63,6 +64,24 @@ const form = ref({
 const chartRef = ref(null)
 let chartInstance = null
 const chartData = ref([])
+const isSubmitting = ref(false)
+const myDiaries = ref([])
+const isLoading = ref(false)
+const moodTips = ref([])
+
+// 从API数据转换为图表数据
+const convertToChartData = (diary) => {
+  // 从接口返回的moods数组中获取第一个mood
+  const mood = diary.moods && diary.moods.length > 0 ? diary.moods[0] : null
+
+  return {
+    id: diary.id,
+    date: dayjs(diary.createTime).format('YYYY-MM-DD HH:mm:ss'),
+    score: mood ? mood.score : 0,
+    tags: mood ? [mood.label] : [],
+    content: diary.content
+  }
+}
 
 const initChart = () => {
   chartInstance = echarts.init(chartRef.value)
@@ -93,7 +112,39 @@ const generateTips = (score) => {
   return tipsCollection.low
 }
 
-const handleSubmit = () => {
+// 获取我的日记列表
+const fetchMyDiaries = async () => {
+  try {
+    isLoading.value = true
+    const response = await getMyDiaries()
+    if (response.code === 200 && response.data) {
+      myDiaries.value = response.data
+
+      // 将API返回的日记数据转换为图表可用的格式
+      chartData.value = myDiaries.value
+        .slice(-5) // 只取最近5条
+        .map(diary => convertToChartData(diary))
+
+      // 更新图表
+      updateChart()
+
+      // 根据最近一条日记生成心情建议
+      if (chartData.value.length > 0) {
+        const latestScore = chartData.value[chartData.value.length - 1].score
+        moodTips.value = generateTips(latestScore)
+      }
+    } else {
+      message.error(response.message || '获取日记列表失败')
+    }
+  } catch (error) {
+    console.error('获取日记列表失败:', error)
+    message.error('获取日记列表失败')
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const handleSubmit = async () => {
   if (!form.value.tags) {
     return message.error('请选择心情标签')
   }
@@ -101,40 +152,62 @@ const handleSubmit = () => {
     return message.error('请输入日记内容')
   }
 
-  const selectedTag = moodTags.find((t) => t.value === form.value.tags)
-  const newRecord = {
-    date: currentTime.value,
-    score: selectedTag.score,
-    tags: [selectedTag.label],
-    content: form.value.content,
-  }
-  console.log('[数据记录] 新增条目：', newRecord)
-
-  // 更新图表数据（保留最近5条）
-  chartData.value = [...chartData.value, newRecord].slice(-5)
-  console.log('[图表数据] 更新后数据：', chartData.value)
-
-  // 显示保存结果
-  const tipsList = generateTips(newRecord.score)
-  const randomTip = tipsList[Math.floor(Math.random() * tipsList.length)]
-  console.log('[情绪建议] 生成建议列表：', tipsList)
-  message.success({
-    content: `日记保存成功！🎉\n 情绪指数：${newRecord.score}\n专属建议：${randomTip}`,
-    // description: `情绪指数：${newRecord.score}\n专属建议：${randomTip}`,
-    duration: 3,
-  })
-
-  // 更新图表视图
   try {
-    updateChart()
-    console.log('[图表操作] 图表更新完成')
-  } catch (e) {
-    console.error('[图表错误] 更新失败：', e)
-    message.error('图表更新失败，请稍后重试')
+    isSubmitting.value = true
+
+    // 准备要提交的数据
+    const data = {
+      content: form.value.content,
+      moodValues: [form.value.tags] // API需要的是情绪值数组
+    }
+
+    // 调用创建日记API
+    const response = await createDiarie(data)
+
+    if (response.code === 201 && response.data) {
+      const newDiary = response.data
+
+      // 将新日记添加到列表
+      myDiaries.value.push(newDiary)
+
+      // 转换为图表数据
+      const newChartRecord = convertToChartData(newDiary)
+
+      // 更新图表数据（保留最近5条）
+      chartData.value = [...chartData.value, newChartRecord].slice(-5)
+
+      // 生成心情建议
+      const selectedTag = moodTags.find((t) => t.value === form.value.tags)
+      const tipsList = generateTips(selectedTag.score)
+      const randomTip = tipsList[Math.floor(Math.random() * tipsList.length)]
+      moodTips.value = tipsList
+
+      // 显示保存成功消息
+      message.success({
+        content: `日记保存成功！🎉\n 情绪指数：${selectedTag.score}\n专属建议：${randomTip}`,
+        duration: 3,
+      })
+
+      // 更新图表
+      updateChart()
+
+      // 清空表单
+      form.value.content = ''
+      form.value.tags = null
+    } else {
+      message.error(response.message || '保存日记失败')
+    }
+  } catch (error) {
+    console.error('保存日记失败:', error)
+    message.error('保存日记失败')
+  } finally {
+    isSubmitting.value = false
   }
 }
 
 const updateChart = () => {
+  if (!chartInstance) return
+
   const option = {
     xAxis: {
       type: 'category',
@@ -142,22 +215,53 @@ const updateChart = () => {
         .sort((a, b) => dayjs(a.date).unix() - dayjs(b.date).unix())
         .map((r) => dayjs(r.date).format('MM/DD HH:mm')),
     },
-    yAxis: { type: 'value' },
+    yAxis: {
+      type: 'value',
+      name: '情绪值',
+      axisLabel: {
+        formatter: function (value) {
+          // 找到最接近该值的情绪标签
+          const closestMood = MOOD_CONFIG.reduce((prev, curr) => {
+            return Math.abs(curr.score - value) < Math.abs(prev.score - value) ? curr : prev;
+          });
+          return closestMood.label;
+        }
+      }
+    },
     tooltip: {
       formatter: (params) => {
-        return `${params.name}<br/>心情标签：${chartData.value[params.dataIndex].tags.join(', ')}<br/>分数：${params.value}`
+        const dataIndex = params.dataIndex;
+        const item = chartData.value[dataIndex];
+        return `${params.name}<br/>心情标签：${item.tags.join(', ')}<br/>分数：${params.value}<br/>内容：${item.content.substring(0, 20)}...`
       },
     },
     series: [
       {
-        data: chartData.value.slice(-5).map((r) => r.score),
+        data: chartData.value.map((r) => r.score),
         type: 'line',
+        smooth: true, // 使线条更柔和平滑
         itemStyle: {
           color: '#1890ff',
         },
         lineStyle: {
           width: 2,
+          shadowColor: 'rgba(0, 0, 0, 0.2)',
+          shadowBlur: 10
         },
+        areaStyle: {
+          // 添加柔和的渐变区域
+          color: {
+            type: 'linear',
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [
+              { offset: 0, color: 'rgba(24, 144, 255, 0.6)' },
+              { offset: 1, color: 'rgba(24, 144, 255, 0.1)' }
+            ]
+          }
+        }
       },
     ],
   }
@@ -168,15 +272,28 @@ const currentTime = ref(dayjs().format('YYYY-MM-DD HH:mm:ss'))
 let timer = null
 
 onMounted(() => {
+  // 获取日记列表
+  fetchMyDiaries()
+
+  // 初始化图表
   initChart()
+
+  // 更新当前时间
   timer = setInterval(() => {
     currentTime.value = dayjs().format('YYYY-MM-DD HH:mm:ss')
   }, 1000)
+
+  // 窗口大小改变时重绘图表
   window.addEventListener('resize', () => chartInstance?.resize())
 })
 
 onBeforeUnmount(() => {
   clearInterval(timer)
+  // 销毁图表实例
+  if (chartInstance) {
+    chartInstance.dispose()
+    chartInstance = null
+  }
 })
 </script>
 
