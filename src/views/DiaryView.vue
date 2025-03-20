@@ -25,14 +25,8 @@
     </a-card>
 
     <a-card title="情绪建议" style="margin-top: 24px">
-      <a-alert
-        v-for="(tip, index) in moodTips"
-        :key="index"
-        :message="tip"
-        type="info"
-        show-icon
-        style="margin-bottom: 12px"
-      />
+      <a-alert v-for="(tip, index) in moodTips" :key="index" :message="tip" type="info" show-icon
+        style="margin-bottom: 12px" />
     </a-card>
   </a-layout>
 </template>

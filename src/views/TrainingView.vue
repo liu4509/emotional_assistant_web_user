@@ -62,6 +62,7 @@ const trainingData = reactive({
         {
           id: 'option1',
           text: '开始焦虑，惶恐难安',
+          // TODO: 不使用分值 直接恭喜 该功能在于引导用户正确选项来指导行为
           score: 1,
           isBest: false,
           next: 'scene2',
