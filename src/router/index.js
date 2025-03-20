@@ -18,6 +18,7 @@ const router = createRouter({
         { path: 'travel', component: () => import('../views/TravelView.vue') },
         { path: 'upload', component: () => import('../views/UploadView.vue') },
         { path: 'media', component: () => import('../views/MediaView.vue') },
+        { path: 'media-video', component: () => import('../views/MediaVideoView.vue') },
         { path: 'articles', component: () => import('../views/ArticleView.vue') },
         { path: 'videos', component: () => import('../views/VideoView.vue') },
         { path: 'games', component: () => import('../views/GameView.vue') },

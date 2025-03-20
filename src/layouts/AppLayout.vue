@@ -7,9 +7,12 @@
           @select="handleMenuSelect" class="main-menu">
           <div style="display: flex">
             <a-menu-item key="diary"> 情绪日记 </a-menu-item>
-            <a-menu-item key="media"> 音乐视频 </a-menu-item>
             <a-menu-item key="chat"> AI 助手 </a-menu-item>
           </div>
+          <a-sub-menu key="3" title="漫游">
+            <a-menu-item key="media">发现音乐</a-menu-item>
+            <a-menu-item key="media-video">发现视频</a-menu-item>
+          </a-sub-menu>
           <a-sub-menu key="1" title="旅游">
             <a-menu-item key="travel">旅游推荐</a-menu-item>
             <a-menu-item key="upload">打卡照片</a-menu-item>
