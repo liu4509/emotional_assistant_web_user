@@ -27,8 +27,7 @@
         <a-col v-for="(item, index) in filteredMusic" :key="index" :xs="24" :sm="12" :md="8" :lg="6">
           <a-card hoverable class="music-card">
             <div class="album-cover-container">
-              <img :src="item.cover" class="album-cover" :class="{ 'rotating': isCurrentlyPlaying(item) }"
-                :style="getRotationStyle(item)" />
+              <img :src="item.cover" class="album-cover" :class="{ 'rotating': isCurrentlyPlaying(item) }" />
               <div class="play-overlay" @click="handlePlay(item)">
                 <pause-circle-outlined v-if="isCurrentlyPlaying(item)" class="play-icon" />
                 <play-circle-outlined v-else class="play-icon" />
@@ -39,7 +38,7 @@
               <div class="music-title">{{ item.title }}</div>
               <div class="music-artist">{{ item.artist || '未知艺术家' }}</div>
 
-              <div class="music-controls" v-if="isCurrentlyPlaying(item) || isPaused(item)">
+              <div class="music-controls" v-if="isCurrentlyPlaying(item)">
                 <div class="progress-bar-container">
                   <div class="progress-bar" :style="{ width: `${progressPercentage}%` }"></div>
                 </div>
