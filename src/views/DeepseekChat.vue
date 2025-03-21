@@ -98,7 +98,6 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import {
   getChatList,
-  getChatById,
   createChat,
   updateChatTitle,
   deleteChat as deleteChatApi,
@@ -724,13 +723,12 @@ export default {
     onMounted(async () => {
       await loadChatHistory()
       // 如果有历史对话，默认选择第一个
-      if (chatHistory.value.length > 0) {
-        selectChat(chatHistory.value[0].id)
-      } else {
-        // 如果没有历史对话，不自动创建新对话，让用户点击"新建对话"按钮
-        currentChatId.value = null
-        tempChat.value = null
-      }
+      // if (chatHistory.value.length > 0) {
+      //   selectChat(chatHistory.value[0].id)
+      // } else {
+      // 如果没有历史对话，自动创建新对话
+      createNewChat()
+      // }
     })
 
     return {

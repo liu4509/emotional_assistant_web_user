@@ -54,6 +54,19 @@ import { ref, computed, onMounted } from 'vue'
 import { LoadingOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import { getAttractionList, getAttractionsByCategory } from '@/api/attraction'
+import { useRoute } from 'vue-router'
+
+// 获取路由对象
+const route = useRoute()
+
+// 情绪状态与分类值的映射
+const emotionCategoryMap = {
+  'veryPositive': 'very_positive',
+  'positive': 'positive',
+  'neutral': 'neutral',
+  'negative': 'negative',
+  'veryNegative': 'very_negative'
+}
 
 // 状态变量
 const currentCategory = ref('')
@@ -162,7 +175,23 @@ const handleCategoryChange = (value) => {
 
 // 在组件挂载时获取数据
 onMounted(() => {
-  fetchAttractionList()
+  fetchAttractionList().then(() => {
+    // 获取URL中的情绪参数并映射到对应的分类
+    const emotionParam = route.query.emotion
+    if (emotionParam && emotionCategoryMap[emotionParam]) {
+      // 获取映射后的分类值
+      const categoryValue = emotionCategoryMap[emotionParam]
+
+      // 检查该分类是否存在于选项中
+      const categoryExists = categoryOptions.value.some(cat => cat.value === categoryValue)
+
+      if (categoryExists) {
+        // 设置当前分类并加载对应的景点
+        currentCategory.value = categoryValue
+        fetchAttractionsByCategory(categoryValue)
+      }
+    }
+  })
 })
 </script>
 

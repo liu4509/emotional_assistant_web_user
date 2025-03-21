@@ -36,7 +36,7 @@
           <a-typography-title :level="4">{{ resultTitle }}</a-typography-title>
           <a-row :gutter="[16, 16]">
             <a-col v-for="(item, index) in recommendations" :key="index" :span="8">
-              <a-card hoverable @click="router.push(item.route)">
+              <a-card hoverable @click="navigateToPage(item.route)">
                 <template #actions>
                   <span>立即前往</span>
                 </template>
@@ -176,6 +176,22 @@ const handleSubmit = () => {
     showResult.value = true
     message.success('问卷提交成功！')
   }, 500)
+}
+
+const navigateToPage = (route) => {
+  // 根据分数确定情绪状态参数
+  let emotionCategory = '';
+  if (totalScore.value >= 21) emotionCategory = 'veryPositive';
+  else if (totalScore.value >= 17) emotionCategory = 'positive';
+  else if (totalScore.value >= 13) emotionCategory = 'neutral';
+  else if (totalScore.value >= 9) emotionCategory = 'negative';
+  else emotionCategory = 'veryNegative';
+
+  // 携带情绪状态参数跳转到目标页面
+  router.push({
+    path: route,
+    query: { emotion: emotionCategory }
+  });
 }
 
 // 页面加载时获取随机问卷

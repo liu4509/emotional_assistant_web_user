@@ -89,6 +89,19 @@ import { UploadOutlined, PlusOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import { getClockList, getClocksByCategory, createClock } from '@/api/clock'
 import { uploadImageUtil } from '@/utils/utils'  // 引入上传工具函数
+import { useRoute } from 'vue-router'
+
+// 获取路由对象
+const route = useRoute()
+
+// 情绪状态与分类值的映射
+const emotionCategoryMap = {
+  'veryPositive': 'very_positive',
+  'positive': 'positive',
+  'neutral': 'neutral',
+  'negative': 'negative',
+  'veryNegative': 'very_negative'
+}
 
 // 状态变量
 const currentCategory = ref('')
@@ -329,7 +342,23 @@ const handleUpload = async () => {
 
 // 初始化
 onMounted(() => {
-  fetchClockList()
+  fetchClockList().then(() => {
+    // 获取URL中的情绪参数并映射到对应的分类
+    const emotionParam = route.query.emotion
+    if (emotionParam && emotionCategoryMap[emotionParam]) {
+      // 获取映射后的分类值
+      const categoryValue = emotionCategoryMap[emotionParam]
+
+      // 检查该分类是否存在于选项中
+      const categoryExists = categoryOptions.value.some(cat => cat.value === categoryValue)
+
+      if (categoryExists) {
+        // 设置当前分类并加载对应的打卡
+        currentCategory.value = categoryValue
+        fetchClocksByCategory(categoryValue)
+      }
+    }
+  })
 })
 </script>
 

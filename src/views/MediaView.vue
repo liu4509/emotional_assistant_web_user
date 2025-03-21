@@ -11,12 +11,6 @@
               {{ category.label }}
             </a-select-option>
           </a-select>
-
-          <a-select v-model:value="currentMood" placeholder="选择当前心情" style="width: 200px">
-            <a-select-option value="happy">😊 快乐</a-select-option>
-            <a-select-option value="anxious">😟 焦虑</a-select-option>
-            <a-select-option value="sad">😢 悲伤</a-select-option>
-          </a-select>
         </div>
 
         <!-- 加载状态 -->
@@ -81,6 +75,19 @@ import {
 } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import { getMediaList, getMediasByCategory } from '@/api/media'
+import { useRoute } from 'vue-router'
+
+// 获取路由对象
+const route = useRoute()
+
+// 情绪状态与分类值的映射
+const emotionCategoryMap = {
+  'veryPositive': 'very_positive',
+  'positive': 'positive',
+  'neutral': 'neutral',
+  'negative': 'negative',
+  'veryNegative': 'very_negative'
+}
 
 // 状态变量
 const currentMood = ref('happy')
@@ -339,7 +346,23 @@ const formatTime = (seconds) => {
 
 // 在组件挂载时获取音频数据
 onMounted(() => {
-  fetchMediaList()
+  fetchMediaList().then(() => {
+    // 获取URL中的情绪参数并映射到对应的分类
+    const emotionParam = route.query.emotion
+    if (emotionParam && emotionCategoryMap[emotionParam]) {
+      // 获取映射后的分类值
+      const categoryValue = emotionCategoryMap[emotionParam]
+
+      // 检查该分类是否存在于选项中
+      const categoryExists = categoryOptions.value.some(cat => cat.value === categoryValue)
+
+      if (categoryExists) {
+        // 设置当前分类并加载对应的音频
+        currentCategory.value = categoryValue
+        fetchMediaByCategory(categoryValue)
+      }
+    }
+  })
 })
 
 // 组件卸载时停止音频播放

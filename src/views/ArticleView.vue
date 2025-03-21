@@ -56,6 +56,19 @@ const articles = ref([])
 const categoryOptions = ref([])
 const previewVisible = ref(false)
 const currentArticle = ref(null)
+import { useRoute } from 'vue-router'
+
+// 获取路由对象
+const route = useRoute()
+
+// 情绪状态与分类值的映射
+const emotionCategoryMap = {
+  'veryPositive': 'very_positive',
+  'positive': 'positive',
+  'neutral': 'neutral',
+  'negative': 'negative',
+  'veryNegative': 'very_negative'
+}
 
 // 获取所有文章
 const fetchArticleList = async () => {
@@ -147,7 +160,23 @@ const showDetail = (article) => {
 
 // 初始化
 onMounted(() => {
-  fetchArticleList()
+  fetchArticleList().then(() => {
+    // 获取URL中的情绪参数并映射到对应的分类
+    const emotionParam = route.query.emotion
+    if (emotionParam && emotionCategoryMap[emotionParam]) {
+      // 获取映射后的分类值
+      const categoryValue = emotionCategoryMap[emotionParam]
+
+      // 检查该分类是否存在于选项中
+      const categoryExists = categoryOptions.value.some(cat => cat.value === categoryValue)
+
+      if (categoryExists) {
+        // 设置当前分类并加载对应的景点
+        currentCategory.value = categoryValue
+        fetchArticlesByCategory(categoryValue)
+      }
+    }
+  })
 })
 </script>
 
