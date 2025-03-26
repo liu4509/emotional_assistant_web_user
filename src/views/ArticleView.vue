@@ -77,7 +77,7 @@ const fetchArticleList = async () => {
     const response = await getArticleList()
 
     if (response.code === 200 && response.data) {
-      articles.value = response.data
+      articles.value = response.data.article
 
       // 提取分类选项
       categoryOptions.value = extractCategoryOptions(articles.value)

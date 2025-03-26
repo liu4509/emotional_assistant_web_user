@@ -81,7 +81,7 @@ const fetchVideoList = async () => {
     const response = await getVideoList()
 
     if (response.code === 200 && response.data) {
-      videos.value = response.data
+      videos.value = response.data.article
 
       // 提取分类选项
       categoryOptions.value = extractCategoryOptions(videos.value)

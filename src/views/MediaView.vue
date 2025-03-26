@@ -153,7 +153,7 @@ const fetchMediaList = async () => {
     const response = await getMediaList()
 
     if (response.code === 200 && response.data) {
-      musicList.value = response.data
+      musicList.value = response.data.article
 
       // 初始化每个音乐项的旋转角度
       musicList.value.forEach(item => {

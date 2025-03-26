@@ -3,7 +3,7 @@ import { message } from 'ant-design-vue'
 
 // 创建 axios 实例
 const service = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api', // 从环境变量获取API基础URL，默认为'/api'
+  baseURL: 'http://localhost/api', // 从环境变量获取API基础URL，默认为'/api'
   timeout: 150000, // 请求超时时间
   // headers: {
   //   'Content-Type': 'application/json'
@@ -12,7 +12,7 @@ const service = axios.create({
 
 // 请求拦截器
 service.interceptors.request.use(
-  config => {
+  (config) => {
     // 从 localStorage 获取 token
     const userStore = JSON.parse(localStorage.getItem('user-store'))
     if (userStore && userStore.accessToken) {
@@ -21,15 +21,15 @@ service.interceptors.request.use(
     }
     return config
   },
-  error => {
+  (error) => {
     console.error('请求错误：', error)
     return Promise.reject(error)
-  }
+  },
 )
 
 // 响应拦截器
 service.interceptors.response.use(
-  response => {
+  (response) => {
     const res = response.data
 
     // 根据后端的响应结构处理数据
@@ -49,7 +49,7 @@ service.interceptors.response.use(
 
     return Promise.reject(new Error(res.message || '请求失败'))
   },
-  error => {
+  (error) => {
     console.error('响应错误：', error)
 
     // 根据错误状态码显示不同的错误信息
@@ -71,7 +71,7 @@ service.interceptors.response.use(
 
     message.error(errorMsg)
     return Promise.reject(error)
-  }
+  },
 )
 
 export default service
